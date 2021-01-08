@@ -4,11 +4,6 @@ from lib2cubs.applevelcom.examples import ExampleServingClient
 
 class ExampleServer(ServerBase):
 
-	# TODO multiprocessing improvement
-	def app(self):
-		while True:
-			conn, addr = self.sock.accept()
-			cc = ExampleServingClient()
-			cc.sock = conn
-			cc.run()
-			conn.close()
+	@classmethod
+	def get_serving_client_class(cls):
+		return ExampleServingClient

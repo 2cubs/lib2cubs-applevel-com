@@ -1,19 +1,17 @@
-from lib2cubs.lowlevelcom.basic import SimpleFrame
-
-from lib2cubs.applevelcom.basic import ClientBase
+from lib2cubs.applevelcom.basic import ClientBase, ServerBase
 
 
 class ServingClient(ClientBase):
 
-	def __init__(self):
-		pass
+	parent: ServerBase = None
+
+	@property
+	def is_running(self):
+		return self.parent._is_running
+
+	def __init__(self, sock, parent):
+		self.sock = sock
+		self.parent = parent
 
 	def run(self):
 		self._exec_app()
-
-	def app(self):
-		print(f'ServClient connected on {self.sock}')
-		data = {
-			'data': f'Hello World! from {self.endpoint}:{self.port}. Happy year 2021!'
-		}
-		self.sock.send(bytes(SimpleFrame(data)))
