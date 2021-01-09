@@ -4,6 +4,8 @@ from queue import Queue
 from selectors import EVENT_READ, EVENT_WRITE
 from socket import socket
 from ssl import SSLWantReadError
+from threading import Lock
+from time import sleep
 
 from lib2cubs.lowlevelcom import CommunicationEngine
 from lib2cubs.lowlevelcom.basic import SimpleFrame
@@ -31,32 +33,45 @@ class ClientBase(AppBase):
 		# TODO Change the threads invocation
 		start_new_thread(self._t_sel_events_loop, ('selectors event loop thread', ))
 		start_new_thread(self._event_socket_write, (sock, EVENT_WRITE))
+		start_new_thread(self._check_delivery_status, (sock,))
+
+	_sent_unconfirmed_frames: dict = dict()
+	_sent_unconfirmed_frame_lock: Lock = Lock()
+
+	def _check_delivery_status(self, sock):
+		while self._is_running:
+			sleep(5)
+			if self._sent_unconfirmed_frames:
+				self._sent_unconfirmed_frame_lock.acquire()
+				print('Undelivered frames:', self._sent_unconfirmed_frames.keys())
+				for uid, frame in self._sent_unconfirmed_frames.items():
+					print('Re-sending frames: ', uid)
+					self.send_frame(frame)
+				self._sent_unconfirmed_frame_lock.release()
 
 	def _event_socket_write(self, sock, mask):
 		q = self._queue_write
 		while self._is_running:
 			frame = q.get()
-			# print(f'WRITE: Got a frame to write')
+			if 'msg_id' in frame.content:
+				self._sent_unconfirmed_frame_lock.acquire()
+				self._sent_unconfirmed_frames[frame.content['msg_id']] = frame
+				self._sent_unconfirmed_frame_lock.release()
 			try:
 				self.sock.send(bytes(frame))
-				# print(f'Frame is sent:', frame)
 			except OSError as e:
 				pass
 			q.task_done()
-			# print('Task is done')
 
 	def send_frame(self, frame):
 		self._queue_write.put(frame)
 
 	def _event_socket_read(self, sock, mask):
-		n = datetime.now()
-		# print(f'data read {n}')
 		try:
 			self._frame_form = self._frame_form if self._frame_form and not self._frame_form.is_construction_completed() else SimpleFrame()
 
 			if self._frame_form.from_socket(sock) is None:
 				self._disconnected(sock)
-			# print(f'TEST: {self._frame_form}')
 		except SSLWantReadError as e:
 			pass
 		except ConnectionResetError as e:
@@ -70,13 +85,31 @@ class ClientBase(AppBase):
 			)
 
 	def frame_received(self, frame: SimpleFrame):
+		self._sent_unconfirmed_frame_lock.acquire()
+
 		data = frame.content
-		# print(f'Frame received with data: {data}')
+
+		if 'confirm_for' in data:
+			uid = data["confirm_for"]
+
+			if uid in self._sent_unconfirmed_frames:
+				print(f'Received confirmation for: {uid}')
+				del self._sent_unconfirmed_frames[uid]
+			else:
+				print(f'Received ORPHANED confirmation for: {uid}. Skipping.')
+
+		self._sent_unconfirmed_frame_lock.release()
+
 		if 'action' in data:
+			self.confirm_frame(data['msg_id'])
 			self.remote.receive_action(frame)
 
 		if 'return' in data:
+			self.confirm_frame(data['msg_id'])
 			self.remote.receive_response(frame)
+
+	def confirm_frame(self, uid):
+		self.send_frame(SimpleFrame({'confirm_for': uid}))
 
 	def _disconnected(self, sock):
 		print(f'Connection is closed.')

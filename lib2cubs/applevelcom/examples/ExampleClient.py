@@ -6,8 +6,7 @@ from lib2cubs.applevelcom.basic import ClientBase, Remote
 class ExampleClient(ClientBase):
 
 	def app(self, remote: Remote):
-		# TODO Possibly some problems with delays at startup (SSL). Investigate if needed
-		# TODO Inconsistencies between runs. Sometimes server is missing frames (Investigate)
+		# TODO Integrate reconnection in case of SSL errors in communication (!IMPORTANT)
 		print('Checking auth method.')
 		res = remote.auth('ivan', 'pppaaassswwwooorrrddd')
 		print(f'Is auth successful: {res}')
