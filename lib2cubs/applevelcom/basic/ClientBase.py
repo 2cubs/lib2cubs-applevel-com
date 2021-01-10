@@ -24,7 +24,7 @@ class ClientBase(AppBase):
 		self.port = port
 
 	def run(self):
-		CommunicationEngine.secure_client(self._exec_app, self.endpoint, self.port)
+		CommunicationEngine.secure_client(self._setup_app, self.endpoint, self.port)
 
 	def before_app(self, sock: socket = None):
 		super(ClientBase, self).before_app(sock)
@@ -66,9 +66,28 @@ class ClientBase(AppBase):
 	def send_frame(self, frame):
 		self._queue_write.put(frame)
 
+	def reconnect_if_needed(self, sock, e = None):
+		print(f'Need to reconnect: {e}')
+		i = 5
+		while i and not self._is_socket_connected(sock):
+			print(f'Short sleep of 5 before reconnect attempt.')
+			sleep(5)
+			print(f'Reconnecting attempt: {i}')
+			sock.close()
+			sock.connect((self.endpoint, self.port))
+
+	def _is_socket_connected(self, sock):
+		try:
+			sock.send(0)
+		except:
+			return False
+		return True
+
 	def _event_socket_read(self, sock, mask):
 		try:
 			self._frame_form = self._frame_form if self._frame_form and not self._frame_form.is_construction_completed() else SimpleFrame()
+			if self._frame_form.reconnect_cb is None:
+				self._frame_form.reconnect_cb = self.reconnect_if_needed
 
 			if self._frame_form.from_socket(sock) is None:
 				self._disconnected(sock)

@@ -14,4 +14,7 @@ class ServingClient(ClientBase):
 		self.parent = parent
 
 	def run(self):
-		self._exec_app()
+		self._setup_app()
+
+	def reconnect_if_needed(self, sock, e = None):
+		exit(0)

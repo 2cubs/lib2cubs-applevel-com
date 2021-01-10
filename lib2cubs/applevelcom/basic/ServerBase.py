@@ -21,7 +21,7 @@ class ServerBase(AppBase):
 		self.port = port
 
 	def run(self):
-		CommunicationEngine.secure_server(self._exec_app, self.endpoint, self.port)
+		CommunicationEngine.secure_server(self._setup_app, self.endpoint, self.port)
 
 	def before_app(self, sock: socket = None):
 		super(ServerBase, self).before_app(sock)

@@ -35,7 +35,7 @@ class AppBase:
 	def after_app(self):
 		pass
 
-	def _exec_app(self, sock: socket = None):
+	def _setup_app(self, sock: socket = None):
 		self.before_app(sock)
 		self.app(self.remote)
 		self.after_app()

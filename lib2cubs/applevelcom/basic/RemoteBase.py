@@ -57,7 +57,8 @@ class RemoteBase:
 			print(f'Orphaned response {data}')
 			return
 		self._resp_data[data['for_id']] = data['return']
-		self._calls_locks[data['for_id']].release()
+		if self._calls_locks[data['for_id']].locked():
+			self._calls_locks[data['for_id']].release()
 
 	def receive_action(self, frame):
 		# print(f'Received action {frame}')
