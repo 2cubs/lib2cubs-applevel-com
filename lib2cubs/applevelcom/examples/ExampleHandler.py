@@ -1,3 +1,4 @@
+from datetime import datetime
 from os import uname
 from platform import node
 from time import sleep
@@ -21,6 +22,7 @@ class ExampleHandler(Handler):
 		while True:
 			# Waiting for events
 			sleep(10)
+			remote.event_service_status_changed('SeRvIcE+NaMe', f'BooBooBoo {datetime.now()}')
 
 	# All of the bellow actions are dummies.
 
@@ -37,9 +39,6 @@ class ExampleHandler(Handler):
 		fake_creds = {'dan': 'hhhh', 'stan': 'VvVv', 'ivan': 'pppaaassswwwooorrrddd', 'bogdan': 'KkKKk'}
 		if user in fake_creds and password == fake_creds[user]:
 			self._user_name = user
-			# TODO  something with instances. Sequential running of 2 independent
-			#       clients is causing 2 times of role "user" in the roles list.
-			#       Investigate!
 			self._user_roles.append('user')
 
 		res = self.is_authorized()

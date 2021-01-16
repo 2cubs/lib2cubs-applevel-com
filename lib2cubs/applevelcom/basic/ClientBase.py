@@ -17,6 +17,7 @@ class ClientBase(AppBase):
 	_sent_unconfirmed_frame_lock: Lock = Lock()
 	_is_app_started: bool = False
 	_remote = None
+	_event_subscriptions: dict = None
 
 	def __init__(self, *args, **kwargs):
 		super(ClientBase, self).__init__(*args, **kwargs)
@@ -171,3 +172,23 @@ class ClientBase(AppBase):
 		def wrapper(s, *args, **kwargs):
 			return func(s, *args, **kwargs)
 		return wrapper
+
+	def subscribe_to_event(self, name: str, cb: callable):
+		if self._event_subscriptions is None:
+			self._event_subscriptions = dict()
+		if name not in self._event_subscriptions:
+			self._event_subscriptions[name] = list()
+		self._event_subscriptions[name].append(cb)
+
+	def unsubscribe_from_event(self, name: str, cb: callable):
+		if self._event_subscriptions is None:
+			self._event_subscriptions = dict()
+		if name not in self._event_subscriptions:
+			self._event_subscriptions[name] = list()
+		if cb in self._event_subscriptions[name]:
+			self._event_subscriptions[name].remove(cb)
+
+	def trigger_event(self, __name: str, *args, **kwargs):
+		if __name in self._event_subscriptions:
+			for cb in self._event_subscriptions[__name]:
+				cb(*args, **kwargs)
