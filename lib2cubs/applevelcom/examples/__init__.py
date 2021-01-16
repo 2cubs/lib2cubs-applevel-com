@@ -1,3 +1,2 @@
-from .ExampleServingClient import ExampleServingClient
+from .ExampleHandler import ExampleHandler
 from .ExampleClient import ExampleClient
-from .ExampleServer import ExampleServer

@@ -2,19 +2,23 @@ from os import uname
 from platform import node
 from time import sleep
 
-from lib2cubs.applevelcom.basic import ServingClient, action, Remote
+from lib2cubs.applevelcom.basic import Handler, action, Remote
 
 
-class ExampleServingClient(ServingClient):
+class ExampleHandler(Handler):
 
 	_user_name: str = None
-	_user_roles: list = list()
+	_user_roles: list = None
+
+	def init(self):
+		self._user_roles = list()
 
 	def is_authorized(self):
 		return bool(self._user_name)
 
 	def app(self, remote: Remote):
-		while self.is_running:
+		print('The Handler has started. Infinite loop is running')
+		while True:
 			# Waiting for events
 			sleep(10)
 

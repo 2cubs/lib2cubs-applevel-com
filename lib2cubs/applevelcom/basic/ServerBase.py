@@ -1,38 +1,43 @@
-from _thread import start_new_thread
-from abc import abstractmethod
-from selectors import EVENT_READ, EVENT_WRITE
-from socket import socket
 from time import sleep
 
-from lib2cubs.lowlevelcom import CommunicationEngine
-
-from lib2cubs.applevelcom.basic import AppBase
+from lib2cubs.applevelcom.basic import AppBase, Connection
 
 
 class ServerBase(AppBase):
 
+	handler_class = None
+	_active_handlers: dict = None
+
+	def __init__(self, *args, **kwargs):
+		super(ServerBase, self).__init__(*args, **kwargs)
+		self._active_handlers = dict()
+		self._connection.subscribe_to_event('accept', self._handler_connection_ready)
+
+	def _handler_connection_ready(self, connection: Connection):
+		handler = self.handler_class(connection)
+		print('Incoming connection. Accepting. Deploying handler')
+		print(f'Handler: {handler.id}')
+		handler.start_app()
+		self._active_handlers[handler.id] = handler
+
 	@classmethod
-	@abstractmethod
-	def get_serving_client_class(cls):
-		pass
+	def get_instance(cls, handler_class=None, *args, **kwargs):
+		instance = super(ServerBase, cls).get_instance(*args, **kwargs)
+		instance.handler_class = handler_class if handler_class is not None else instance.handler_class
+		return instance
 
-	def __init__(self, endpoint: str, port: int):
-		self.endpoint = endpoint
-		self.port = port
+	@classmethod
+	def create_connection(cls, host: str, port: int, client_crt=None, server_key=None, server_crt=None, server_hostname=None) -> Connection:
+		conn = cls._common_prepare_connection(Connection.TYPE_SERVER, host, port,
+			client_crt=client_crt,
+			enc_key=server_key,
+			server_crt=server_crt,
+			server_hostname=server_hostname
+		)
+		return conn
 
-	def run(self):
-		CommunicationEngine.secure_server(self._setup_app, self.endpoint, self.port)
-
-	def before_app(self, sock: socket = None):
-		super(ServerBase, self).before_app(sock)
-		self.sel.register(self.sock, EVENT_READ, self._sel_accept)
-		self._t_sel_events_loop('selectors event loop thread')
-
-	def _sel_accept(self, conn, mask):
-		print(f'Connection {conn} is accepted')
-		sock, addr = conn.accept()
-		start_new_thread(self._new_conn, (sock,))
-
-	def _new_conn(self, sock):
-		cc = self.get_serving_client_class()(sock, self)
-		cc.run()
+	def start_app(self):
+		self._connection.listen()
+		self._connection.ready_to_operate()
+		while True:
+			sleep(10)

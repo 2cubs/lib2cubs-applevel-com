@@ -1,51 +1,45 @@
 from abc import abstractmethod
-from selectors import DefaultSelector, BaseSelector
-from socket import socket
+from os.path import join
 
-from lib2cubs.applevelcom.basic import Remote
+from lib2cubs.applevelcom.basic import Connection
 
 
 class AppBase:
 
-	_is_running: bool = True
+	# _is_running: bool = True
 
-	sock: socket = None
-	endpoint: str = None
-	port: int = None
-	remote: Remote = None
-	sel: BaseSelector = None
+	# sock: socket = None
+	# endpoint: str = None
+	# port: int = None
+	# _remote = None
+	# sel: BaseSelector = None
+	_connection: Connection = None
+
+	def __init__(self, conn: Connection):
+		self._connection = conn
 
 	@classmethod
-	def _action(cls, func: callable):
-		def wrapper(s, *args, **kwargs):
-			return func(s, *args, **kwargs)
-		return wrapper
-
 	@abstractmethod
-	def run(self):
+	def create_connection(cls, host, port) -> Connection:
 		pass
 
-	def before_app(self, sock: socket = None):
-		if sock is not None:
-			self.sock = sock
-		self.sock.setblocking(False)
-		self.remote = Remote(self.sock, self)
-		self.sel = DefaultSelector()
+	@classmethod
+	def _common_prepare_connection(cls, t, host: str, port: int, client_crt=None, enc_key=None, server_crt=None, server_hostname=None) -> Connection:
+		conn = Connection(t, host, port)
+		if t in (Connection.TYPE_CLIENT, Connection.TYPE_SERVER):
+			default_subdir = 'ssl'
+			conn.ssl_client_cert = join(default_subdir, 'client.crt') if not client_crt else client_crt
+			conn.ssl_server_cert = join(default_subdir, 'server.crt') if not server_crt else server_crt
+			if t == Connection.TYPE_CLIENT:
+				conn.ssl_client_key = join(default_subdir, 'client.key') if not enc_key else enc_key
+			if t == Connection.TYPE_SERVER:
+				conn.ssl_server_key = join(default_subdir, 'server.key') if not enc_key else enc_key
+			conn.ssl_server_hostname = '2cubs-server' if not server_hostname else server_hostname
+		return conn
 
-	def after_app(self):
+	@classmethod
+	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009):
+		return cls(cls.create_connection(host, port))
+
+	def start_app(self):
 		pass
-
-	def _setup_app(self, sock: socket = None):
-		self.before_app(sock)
-		self.app(self.remote)
-		self.after_app()
-
-	@abstractmethod
-	def app(self, remote: Remote):
-		pass
-
-	def _t_sel_events_loop(self, name):
-		while self._is_running:
-			events = self.sel.select()
-			for key, mask in events:
-				key.data(key.fileobj, mask)

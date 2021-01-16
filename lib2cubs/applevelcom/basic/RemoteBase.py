@@ -1,27 +1,21 @@
 import uuid
-from copy import copy
-from socket import socket
 from threading import Lock
-from time import sleep
 
-from lib2cubs.lowlevelcom.basic import SimpleFrame
-
-# from lib2cubs.applevelcom.basic import ClientBase
+from lib2cubs.applevelcom.transport import SimpleFrame
 
 
 class RemoteBase:
 
-	sock: socket = None
-	app = None
+	_app = None
 
 	_calls_locks = dict()
 	_resp_data = dict()
 
-	def __init__(self, sock, app):
-		self.sock = sock
-		self.app = app
+	def __init__(self, app):
+		self._app = app
 
 	def rfc(self, name: str, *args, **kwargs):
+		# print(f'Making Action request: {name}')
 		data = {
 			'action': name,
 			'args': [*args],
@@ -31,7 +25,7 @@ class RemoteBase:
 
 		self._calls_locks[data['msg_id']] = lck = Lock()
 		self._resp_data[data['msg_id']] = None
-		self.app.send_frame(SimpleFrame(data))
+		self._app.send(SimpleFrame(data))
 		lck.acquire()
 		lck.acquire()
 		res = self._resp_data[data['msg_id']]
@@ -39,16 +33,19 @@ class RemoteBase:
 
 		del self._calls_locks[data['msg_id']]
 		del self._resp_data[data['msg_id']]
+		# print(f'Finishing Action request: {name}')
 
 		return res
 
 	def resp(self, frame: SimpleFrame, res: any):
+		# print(f'Making Action resp: {frame}')
 		data = {
 			'return': res,
 			'for_id': frame.content['msg_id'],
 			'msg_id': str(uuid.uuid1())
 		}
-		self.app.send_frame(SimpleFrame(data))
+		self._app.send(SimpleFrame(data))
+		# print(f'Finishing Action resp: {frame}')
 
 	def receive_response(self, frame):
 		# print(f'Received response {frame}')
@@ -65,7 +62,7 @@ class RemoteBase:
 		data = frame.content
 		args = data['args']
 		kwargs = data['kwargs']
-		res = getattr(self.app, data['action'])(*args, **kwargs)
+		res = getattr(self._app, data['action'])(*args, **kwargs)
 		self.resp(frame, res)
 
 	def __getattr__(self, item):

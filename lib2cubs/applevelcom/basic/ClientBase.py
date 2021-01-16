@@ -1,42 +1,50 @@
-from _thread import start_new_thread
-from datetime import datetime
 from queue import Queue
-from selectors import EVENT_READ, EVENT_WRITE
-from socket import socket
-from ssl import SSLWantReadError
-from threading import Lock
+from threading import Lock, Thread
 from time import sleep
 
-from lib2cubs.lowlevelcom import CommunicationEngine
 from lib2cubs.lowlevelcom.basic import SimpleFrame
 
-from lib2cubs.applevelcom.basic import AppBase
+from lib2cubs.applevelcom.basic import AppBase, Connection, Remote
 
 
 class ClientBase(AppBase):
 
-	_frame_form: SimpleFrame = None
 	_action_threads: list = list()
-	_queue_write: Queue = None
-
-	def __init__(self, endpoint: str, port: int):
-		self.endpoint = endpoint
-		self.port = port
-
-	def run(self):
-		CommunicationEngine.secure_client(self._setup_app, self.endpoint, self.port)
-
-	def before_app(self, sock: socket = None):
-		super(ClientBase, self).before_app(sock)
-		self._queue_write = Queue()
-		self.sel.register(self.sock, EVENT_READ, self._event_socket_read)
-		# TODO Change the threads invocation
-		start_new_thread(self._t_sel_events_loop, ('selectors event loop thread', ))
-		start_new_thread(self._event_socket_write, (sock, EVENT_WRITE))
-		start_new_thread(self._check_delivery_status, (sock,))
+	_queue_sending_frames: Queue = None
+	_thread: Thread = None
 
 	_sent_unconfirmed_frames: dict = dict()
 	_sent_unconfirmed_frame_lock: Lock = Lock()
+	_is_app_started: bool = False
+	_remote = None
+
+	def __init__(self, *args, **kwargs):
+		super(ClientBase, self).__init__(*args, **kwargs)
+		self._thread = Thread(target=self._run_app, daemon=True)
+		self._queue_sending_frames = Queue()
+		self.init()
+
+	def init(self):
+		pass
+
+	def _run_app(self):
+		self._before_app()
+		self.app(self._remote)
+		self._after_app()
+
+	def _before_app(self):
+		self._remote = Remote(self)
+		self._connection.subscribe_to_event(Connection.LL_EVENT_WRITE, self._sending_data)
+		self._connection.subscribe_to_event(Connection.LL_EVENT_READ, self._receiving_data)
+		# All the events must be prepared and subscribed before the internals will start the selectors non-blocking behaviour
+		self._connection.ready_to_operate()
+		# start_new_thread(self._check_delivery_status, (sock,))
+
+	def app(self, remote):
+		pass
+
+	def _after_app(self):
+		pass
 
 	def _check_delivery_status(self, sock):
 		while self._is_running:
@@ -46,62 +54,45 @@ class ClientBase(AppBase):
 				print('Undelivered frames:', self._sent_unconfirmed_frames.keys())
 				for uid, frame in self._sent_unconfirmed_frames.items():
 					print('Re-sending frames: ', uid)
-					self.send_frame(frame)
+					self.send(frame)
 				self._sent_unconfirmed_frame_lock.release()
 
-	def _event_socket_write(self, sock, mask):
-		q = self._queue_write
-		while self._is_running:
-			frame = q.get()
-			if 'msg_id' in frame.content:
-				self._sent_unconfirmed_frame_lock.acquire()
-				self._sent_unconfirmed_frames[frame.content['msg_id']] = frame
-				self._sent_unconfirmed_frame_lock.release()
-			try:
-				self.sock.send(bytes(frame))
-			except OSError as e:
-				pass
-			q.task_done()
+	def _sending_data(self):
+		frame = self._queue_sending_frames.get()
+		if 'msg_id' in frame.content:
+			self._sent_unconfirmed_frame_lock.acquire()
+			self._sent_unconfirmed_frames[frame.content['msg_id']] = frame
+			self._sent_unconfirmed_frame_lock.release()
+		self._connection.send_frame(frame)
+		self._queue_sending_frames.task_done()
 
-	def send_frame(self, frame):
-		self._queue_write.put(frame)
+	def _receiving_data(self):
+		frame = self._connection.collect_frame()
+		# print(f'Frame is being collected: {frame}')
+		if frame:
+			t = Thread(target=self.frame_received, args=(frame, ))
+			self._action_threads.append(t)
+			t.start()
 
-	def reconnect_if_needed(self, sock, e = None):
-		print(f'Need to reconnect: {e}')
-		i = 5
-		while i and not self._is_socket_connected(sock):
-			print(f'Short sleep of 5 before reconnect attempt.')
-			sleep(5)
-			print(f'Reconnecting attempt: {i}')
-			sock.close()
-			sock.connect((self.endpoint, self.port))
+	def send(self, frame):
+		self._queue_sending_frames.put(frame)
 
-	def _is_socket_connected(self, sock):
-		try:
-			sock.send(0)
-		except:
-			return False
-		return True
+	# def reconnect_if_needed(self, sock, e = None):
+	# 	print(f'Need to reconnect: {e}')
+	# 	i = 5
+	# 	while i and not self._is_socket_connected(sock):
+	# 		print(f'Short sleep of 5 before reconnect attempt.')
+	# 		sleep(5)
+	# 		print(f'Reconnecting attempt: {i}')
+	# 		sock.close()
+	# 		sock.connect((self.endpoint, self.port))
 
-	def _event_socket_read(self, sock, mask):
-		try:
-			self._frame_form = self._frame_form if self._frame_form and not self._frame_form.is_construction_completed() else SimpleFrame()
-			if self._frame_form.reconnect_cb is None:
-				self._frame_form.reconnect_cb = self.reconnect_if_needed
-
-			if self._frame_form.from_socket(sock) is None:
-				self._disconnected(sock)
-		except SSLWantReadError as e:
-			pass
-		except ConnectionResetError as e:
-			self._disconnected(sock)
-
-		if self._frame_form.is_construction_completed():
-			frame = self._frame_form
-			self._frame_form = None
-			self._action_threads.append(
-				start_new_thread(self.frame_received, (frame, ))
-			)
+	# def _is_socket_connected(self, sock):
+	# 	try:
+	# 		sock.send(0)
+	# 	except:
+	# 		return False
+	# 	return True
 
 	def frame_received(self, frame: SimpleFrame):
 		self._sent_unconfirmed_frame_lock.acquire()
@@ -112,7 +103,7 @@ class ClientBase(AppBase):
 			uid = data["confirm_for"]
 
 			if uid in self._sent_unconfirmed_frames:
-				print(f'Received confirmation for: {uid}')
+				# print(f'Received confirmation for: {uid}')
 				del self._sent_unconfirmed_frames[uid]
 			else:
 				print(f'Received ORPHANED confirmation for: {uid}. Skipping.')
@@ -121,17 +112,62 @@ class ClientBase(AppBase):
 
 		if 'action' in data:
 			self.confirm_frame(data['msg_id'])
-			self.remote.receive_action(frame)
+			self._remote.receive_action(frame)
 
 		if 'return' in data:
 			self.confirm_frame(data['msg_id'])
-			self.remote.receive_response(frame)
+			self._remote.receive_response(frame)
 
 	def confirm_frame(self, uid):
-		self.send_frame(SimpleFrame({'confirm_for': uid}))
+		self.send(SimpleFrame({'confirm_for': uid}))
 
 	def _disconnected(self, sock):
 		print(f'Connection is closed.')
-		self._is_running = False
-		self.sel.unregister(sock)
-		sock.close()
+		# self._is_running = False
+		# self.sel.unregister(sock)
+		# sock.close()
+
+	@classmethod
+	def create_connection(cls, host: str, port: int, client_crt=None, client_key=None, server_crt=None, server_hostname=None) -> Connection:
+		conn = cls._common_prepare_connection(Connection.TYPE_CLIENT, host, port,
+			client_crt=client_crt,
+			enc_key=client_key,
+			server_crt=server_crt,
+			server_hostname=server_hostname
+		)
+		return conn
+
+	def start_app(self):
+		if not self._is_app_started:
+			# print('Connecting...')
+			self._connection.connect()
+			# print('Connected!')
+			# self._remote = Remote(self)
+			self._thread.start()
+			self._is_app_started = True
+
+	@property
+	def remote(self) -> Remote:
+		self.start_app()
+		print('Getting remote')
+		return self._remote
+
+	@property
+	def thread(self):
+		return self._thread
+
+	@property
+	def id(self):
+		if not self.endpoint:
+			raise Exception('Endpoint is empty')
+		return f'{self.endpoint[0]}:{self.endpoint[1]}'
+
+	@property
+	def endpoint(self):
+		return self._connection.get_endpoint()
+
+	@classmethod
+	def action_wrap(cls, func: callable):
+		def wrapper(s, *args, **kwargs):
+			return func(s, *args, **kwargs)
+		return wrapper
