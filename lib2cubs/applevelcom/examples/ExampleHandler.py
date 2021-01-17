@@ -3,10 +3,10 @@ from os import uname
 from platform import node
 from time import sleep
 
-from lib2cubs.applevelcom.basic import Handler, action, Remote
+from lib2cubs.applevelcom.basic import HandlerBase, action, Remote
 
 
-class ExampleHandler(Handler):
+class ExampleHandler(HandlerBase):
 
 	_user_name: str = None
 	_user_roles: list = None

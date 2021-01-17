@@ -1,7 +1,7 @@
 from lib2cubs.applevelcom.basic import ClientBase, ServerBase
 
 
-class Handler(ClientBase):
+class HandlerBase(ClientBase):
 
 	parent: ServerBase = None
 

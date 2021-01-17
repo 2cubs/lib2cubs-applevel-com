@@ -1,0 +1,1 @@
+-e git+https://github.com/2cubs/lib2cubs-lowlevel-com.git@0.3.0
