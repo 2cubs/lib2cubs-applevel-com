@@ -1,3 +1,4 @@
+import os
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from ssl import SSLWantReadError
 from threading import Thread, Lock
@@ -24,6 +25,11 @@ class Connection(LibConnection):
 	_subscribed_events: dict = None
 
 	_t_selecting_events: Thread = None
+	_t_read: Thread = None
+	_t_write: Thread = None
+
+	_read_lock: Lock = None
+	_write_lock: Lock = None
 
 	def __init__(self, *args, **kwargs):
 		super(Connection, self).__init__(*args, **kwargs)
@@ -63,24 +69,32 @@ class Connection(LibConnection):
 		self._t_selecting_events = Thread(target=self._selecting_events, daemon=True)
 
 	def ready_to_operate(self):
+		"""
+		This method must be explicitly invoked after reconnection.
+		Otherwise the reading/writing to socket will work incorrectly
+		:return:
+		"""
 		self._t_selecting_events.start()
-
-	_t_read: Thread = None
-	_t_write: Thread = None
 
 	def _reading(self):
 		self._read_lock.acquire()
-		while True:
+		while self._is_connected:
+			# print('R')
 			self._read_lock.acquire()
 			self._invoke_events_callbacks(self.LL_EVENT_READ)
-		self._read_lock.release()
+		if self._read_lock.locked():
+			self._read_lock.release()
 
 	def _writing(self):
 		self._write_lock.acquire()
-		while True:
+		# print('[W2]', self._is_connected)
+
+		while self._is_connected:
+			# print('[W]')
 			self._write_lock.acquire()
 			self._invoke_events_callbacks(self.LL_EVENT_WRITE)
-		self._write_lock.release()
+		if self._write_lock.locked():
+			self._write_lock.release()
 
 	def _register_events(self):
 		self._sel = DefaultSelector()
@@ -88,14 +102,36 @@ class Connection(LibConnection):
 			self._sel.register(self._socket, EVENT_READ, self._event_accept)
 		if self._type in (self.TYPE_HANDLER, self.TYPE_CLIENT):
 			self._sel.register(self._socket, EVENT_READ | EVENT_WRITE, self._event_communicate)
-			self._read_lock = Lock()
-			self._write_lock = Lock()
+
+			self._read_lock = Lock() if self._read_lock is None else self._read_lock
+			self._write_lock = Lock() if self._write_lock is None else self._write_lock
 
 			self._t_read = Thread(target=self._reading, daemon=True)
 			self._t_read.start()
 
 			self._t_write = Thread(target=self._writing, daemon=True)
 			self._t_write.start()
+
+	def _disconnected(self):
+		print('Disconnected happened')
+		self._unregister_events()
+
+	def _unregister_events(self):
+		# self._sel = DefaultSelector()
+		if self._perform_select:
+			# print('Unregistering stuff')
+			self._perform_select = False
+
+			self._sel.unregister(self._socket)
+			if self._read_lock and self._read_lock.locked():
+				self._read_lock.release()
+			if self._write_lock and self._write_lock.locked():
+				self._write_lock.release()
+
+			if self._t_read and self._t_read.is_alive():
+				del self._t_read
+			if self._t_write and self._t_write.is_alive():
+				del self._t_write
 
 	def _selecting_events(self):
 		while self._perform_select:
@@ -105,6 +141,7 @@ class Connection(LibConnection):
 	def _invoke_events_callbacks(self, event_name, *args, **kwargs):
 		# print(f'LL EVENT Invoked: {event_name}')
 		if self._subscribed_events[event_name]:
+			# print('cb: ', self._subscribed_events, event_name)
 			for cb in self._subscribed_events[event_name]:
 				cb(*args, **kwargs)
 		else:
@@ -113,7 +150,7 @@ class Connection(LibConnection):
 				# would decrease unnecessary CPU usage by just a simple timeout.
 				# Should not be considered as a hack, though if you have
 				# a better solution - please propose.
-				print('No write subscription')
+				# print('No write subscription')
 				sleep(10)
 
 	def _event_accept(self, mask):
@@ -121,22 +158,17 @@ class Connection(LibConnection):
 			new_connection = self.accept(self.TYPE_HANDLER)
 			self._invoke_events_callbacks(self.LL_EVENT_ACCEPT, new_connection)
 
-	_read_lock: Lock = None
-	_write_lock: Lock = None
-
 	def _event_communicate(self, mask):
 		if mask & EVENT_READ:
 			if self._read_lock is not None and self._read_lock.locked():
+				# print('MREAD')
 				self._read_lock.release()
 			# Thread(target=self._invoke_events_callbacks, args=(self.LL_EVENT_READ, ), daemon=True).start()
 		if mask & EVENT_WRITE:
 			if self._write_lock is not None and self._write_lock.locked():
+				# print('MWRITE')
 				self._write_lock.release()
 			# self._invoke_events_callbacks(self.LL_EVENT_WRITE)
-
-	def send_frame(self, frame):
-		# print('Sending DATA')
-		self._socket.send(bytes(frame))
 
 	def collect_frame(self):
 		frame = None
@@ -144,9 +176,8 @@ class Connection(LibConnection):
 			frame = self._gather_frame_from_socket(SimpleFrame)
 			if frame is None:
 				self._invoke_events_callbacks(self.LL_EVENT_DISCONNECTED)
-		except ConnectionResetError as e:
-			self._invoke_events_callbacks(self.LL_EVENT_DISCONNECTED)
 		except SSLWantReadError as e:
+			# todo move to ll
 			pass
 
 		if isinstance(frame, SimpleFrame):

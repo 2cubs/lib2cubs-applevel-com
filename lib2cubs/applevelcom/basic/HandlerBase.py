@@ -9,3 +9,10 @@ class HandlerBase(ClientBase):
 		if not self._is_app_started:
 			self._thread.start()
 			self._is_app_started = True
+
+	def _disconnecting(self):
+		print('Client has disconnected')
+
+	def _check_delivery_status_loop(self):
+		while self._connection.is_connected:
+			self._check_delivery_status()

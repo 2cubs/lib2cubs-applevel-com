@@ -1,5 +1,6 @@
 import uuid
 from threading import Lock
+from time import sleep
 
 from lib2cubs.applevelcom.transport import SimpleFrame
 
@@ -25,7 +26,18 @@ class RemoteBase:
 
 		self._calls_locks[data['msg_id']] = lck = Lock()
 		self._resp_data[data['msg_id']] = None
+		# print('Sending')
+		# try:
 		self._app.send(SimpleFrame(data))
+		# except Exception as e:
+		# 	print('connection error. sleeping 5')
+		# 	sleep(5)
+		# 	self._app.start_app()
+		# 	print('Sleep 1')
+		# 	sleep(1)
+		# 	self._app.send(SimpleFrame(data))
+
+		# print('Sent?')
 		lck.acquire()
 		lck.acquire()
 		res = self._resp_data[data['msg_id']]
@@ -39,6 +51,7 @@ class RemoteBase:
 
 	def resp(self, frame: SimpleFrame, res: any):
 		# print(f'Making Action resp: {frame}')
+		# print('Resp receiving')
 		data = {
 			'return': res,
 			'for_id': frame.content['msg_id'],
@@ -51,7 +64,7 @@ class RemoteBase:
 		# print(f'Received response {frame}')
 		data = frame.content
 		if data['for_id'] not in self._resp_data:
-			print(f'Orphaned response {data}')
+			# print(f'Orphaned response {data}')
 			return
 		self._resp_data[data['for_id']] = data['return']
 		if self._calls_locks[data['for_id']].locked():

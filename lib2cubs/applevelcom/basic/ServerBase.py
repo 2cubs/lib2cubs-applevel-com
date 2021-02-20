@@ -21,12 +21,6 @@ class ServerBase(AppBase):
 		self._active_handlers[handler.id] = handler
 
 	@classmethod
-	def get_instance(cls, handler_class=None, *args, **kwargs):
-		instance = super(ServerBase, cls).get_instance(*args, **kwargs)
-		instance.handler_class = handler_class if handler_class is not None else instance.handler_class
-		return instance
-
-	@classmethod
 	def create_connection(cls, host: str, port: int, client_crt=None, server_key=None, server_crt=None, server_hostname=None) -> Connection:
 		conn = cls._common_prepare_connection(Connection.TYPE_SERVER, host, port,
 			client_crt=client_crt,
@@ -41,3 +35,9 @@ class ServerBase(AppBase):
 		self._connection.ready_to_operate()
 		while True:
 			sleep(10)
+
+	@classmethod
+	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, server_key=None, server_crt=None, server_hostname=None, handler_class=None):
+		instance = super(ServerBase, cls).get_instance(host, port, client_crt, server_key, server_crt, server_hostname)
+		instance.handler_class = handler_class if handler_class is not None else instance.handler_class
+		return instance

@@ -1,10 +1,11 @@
+import re
+from copy import copy
 from queue import Queue
 from threading import Lock, Thread
 from time import sleep
 
-from lib2cubs.lowlevelcom.basic import SimpleFrame
-
 from lib2cubs.applevelcom.basic import AppBase, Connection, Remote
+from lib2cubs.applevelcom.transport import SimpleFrame
 
 
 class ClientBase(AppBase):
@@ -12,6 +13,7 @@ class ClientBase(AppBase):
 	_action_threads: list = list()
 	_queue_sending_frames: Queue = None
 	_thread: Thread = None
+	_t_unsent_frames_check: Thread = None
 
 	_sent_unconfirmed_frames: dict = dict()
 	_sent_unconfirmed_frame_lock: Lock = Lock()
@@ -24,6 +26,8 @@ class ClientBase(AppBase):
 		self._thread = Thread(target=self._run_app, daemon=True)
 		self._queue_sending_frames = Queue()
 		self.init()
+		self._t_unsent_frames_check = Thread(target=self._check_delivery_status_loop, daemon=True)
+		self._t_unsent_frames_check.start()
 
 	def init(self):
 		pass
@@ -37,9 +41,9 @@ class ClientBase(AppBase):
 		self._remote = Remote(self)
 		self._connection.subscribe_to_event(Connection.LL_EVENT_WRITE, self._sending_data)
 		self._connection.subscribe_to_event(Connection.LL_EVENT_READ, self._receiving_data)
+		self._connection.subscribe_to_event(Connection.LL_EVENT_DISCONNECTED, self._disconnecting)
 		# All the events must be prepared and subscribed before the internals will start the selectors non-blocking behaviour
 		self._connection.ready_to_operate()
-		# start_new_thread(self._check_delivery_status, (sock,))
 
 	def app(self, remote):
 		pass
@@ -47,24 +51,37 @@ class ClientBase(AppBase):
 	def _after_app(self):
 		pass
 
-	def _check_delivery_status(self, sock):
-		while self._is_running:
-			sleep(5)
-			if self._sent_unconfirmed_frames:
-				self._sent_unconfirmed_frame_lock.acquire()
-				print('Undelivered frames:', self._sent_unconfirmed_frames.keys())
-				for uid, frame in self._sent_unconfirmed_frames.items():
-					print('Re-sending frames: ', uid)
-					self.send(frame)
-				self._sent_unconfirmed_frame_lock.release()
+	def _check_delivery_status(self):
+		# print('sleep check 5')
+		sleep(5)
+		if self._sent_unconfirmed_frames:
+			self._sent_unconfirmed_frame_lock.acquire()
+			# print('Undelivered frames:', self._sent_unconfirmed_frames.keys())
+			for uid, frame in self._sent_unconfirmed_frames.items():
+				# print('Re-sending frames: ', uid)
+				self.send(frame)
+			self._sent_unconfirmed_frame_lock.release()
+
+	def _check_delivery_status_loop(self):
+		while True:
+			self._check_delivery_status()
+
+	_send_frame_lock: Lock = Lock()
 
 	def _sending_data(self):
+		# print(f'Getting something from a queue')
 		frame = self._queue_sending_frames.get()
+		# print(f'Sending now frame {frame}')
 		if 'msg_id' in frame.content:
 			self._sent_unconfirmed_frame_lock.acquire()
 			self._sent_unconfirmed_frames[frame.content['msg_id']] = frame
 			self._sent_unconfirmed_frame_lock.release()
+
+		# print('Waiting for sending lock')
+		# self._send_frame_lock.acquire()
 		self._connection.send_frame(frame)
+		# self._send_frame_lock.release()
+
 		self._queue_sending_frames.task_done()
 
 	def _receiving_data(self):
@@ -75,25 +92,23 @@ class ClientBase(AppBase):
 			self._action_threads.append(t)
 			t.start()
 
+	auto_reconnect: bool = True
+
+	def _disconnecting(self):
+		# self._send_frame_lock.acquire()
+		print('!! Disconnected !!')
+		if self.auto_reconnect and self._is_app_started:
+			print('Connection error. sleeping 5')
+			sleep(5)
+			self.start_app()
+			# self._check_delivery_status()
+			# print('Waiting 5')
+			# sleep(5)
+			# print('Checking delivery status')
+			# self._check_delivery_status()
+
 	def send(self, frame):
 		self._queue_sending_frames.put(frame)
-
-	# def reconnect_if_needed(self, sock, e = None):
-	# 	print(f'Need to reconnect: {e}')
-	# 	i = 5
-	# 	while i and not self._is_socket_connected(sock):
-	# 		print(f'Short sleep of 5 before reconnect attempt.')
-	# 		sleep(5)
-	# 		print(f'Reconnecting attempt: {i}')
-	# 		sock.close()
-	# 		sock.connect((self.endpoint, self.port))
-
-	# def _is_socket_connected(self, sock):
-	# 	try:
-	# 		sock.send(0)
-	# 	except:
-	# 		return False
-	# 	return True
 
 	def frame_received(self, frame: SimpleFrame):
 		self._sent_unconfirmed_frame_lock.acquire()
@@ -107,7 +122,8 @@ class ClientBase(AppBase):
 				# print(f'Received confirmation for: {uid}')
 				del self._sent_unconfirmed_frames[uid]
 			else:
-				print(f'Received ORPHANED confirmation for: {uid}. Skipping.')
+				pass
+				# print(f'Received ORPHANED confirmation for: {uid}. Skipping.')
 
 		self._sent_unconfirmed_frame_lock.release()
 
@@ -122,12 +138,6 @@ class ClientBase(AppBase):
 	def confirm_frame(self, uid):
 		self.send(SimpleFrame({'confirm_for': uid}))
 
-	def _disconnected(self, sock):
-		print(f'Connection is closed.')
-		# self._is_running = False
-		# self.sel.unregister(sock)
-		# sock.close()
-
 	@classmethod
 	def create_connection(cls, host: str, port: int, client_crt=None, client_key=None, server_crt=None, server_hostname=None) -> Connection:
 		conn = cls._common_prepare_connection(Connection.TYPE_CLIENT, host, port,
@@ -139,18 +149,26 @@ class ClientBase(AppBase):
 		return conn
 
 	def start_app(self):
-		if not self._is_app_started:
-			# print('Connecting...')
-			self._connection.connect()
-			# print('Connected!')
-			# self._remote = Remote(self)
-			self._thread.start()
-			self._is_app_started = True
+		if not self._is_app_started or not self._connection.is_connected:
+			try:
+				self._connection.connect(True)
+				# self._connection.ready_to_operate()
+				if not self._is_app_started:
+					self._thread.start()
+				else:
+					# Must be invoked after every reconnection.
+					self._connection.ready_to_operate()
+					# if self._send_frame_lock.locked():
+					# 	self._send_frame_lock.release()
+				self._is_app_started = True
+			except ConnectionRefusedError as e:
+				self._is_app_started = False
+				raise e
 
 	@property
 	def remote(self) -> Remote:
 		self.start_app()
-		print('Getting remote')
+		# print('Getting remote')
 		return self._remote
 
 	@property
@@ -192,3 +210,54 @@ class ClientBase(AppBase):
 		if __name in self._event_subscriptions:
 			for cb in self._event_subscriptions[__name]:
 				cb(*args, **kwargs)
+
+	@classmethod
+	def is_host_ip(cls, host: str) -> bool:
+		"""
+		Returns true if the string host is an IP address (only ipv4 for now)
+		TODO Has to be relocated to another place
+		:return:
+		"""
+		octet_re = r'(25[0-5]|2[0-4][0-9]|[01]?[0-9]{1,2})'
+		reg_exp_line = r"^(%s\.){3}%s$" % (octet_re, octet_re)
+		return bool(re.match(reg_exp_line, host))
+
+	@classmethod
+	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, client_key=None, server_crt=None, server_hostname=None, ssl_cred_bundle=None):
+
+		if cls.is_host_ip(host) and not server_hostname:
+			raise Exception('When the host is an IP address, server_hostname param is mandatory!')
+		else:
+			# If host - is a domain name, use it as server_hostname (SNI),
+			# otherwise if the server_hostname is specified - it has priority over the host's hostname value.
+			server_hostname = server_hostname if server_hostname else host
+
+		if ssl_cred_bundle:
+			client_crt = client_crt if client_crt else ssl_cred_bundle
+			client_key = client_key if client_key else ssl_cred_bundle
+			server_crt = server_crt if server_crt else ssl_cred_bundle
+
+		instance = super(ClientBase, cls).get_instance(host, port, client_crt, client_key, server_crt, server_hostname)
+		return instance
+
+	def connect(self):
+		self.reconnect(False)
+
+	def reconnect(self, forced: bool = True):
+		if not self._connection or not self._connection.is_connected or forced:
+			if self.is_connected:
+				self.disconnect()
+			self.start_app()
+
+	def _new_connection(self):
+		kwargs = copy(self.con_data)
+		kwargs['client_key'] = kwargs['enc_key']
+		del kwargs['enc_key']
+		return self.create_connection(**kwargs)
+
+	def disconnect(self):
+		self._connection = self._new_connection()
+
+	@property
+	def is_connected(self) -> bool:
+		return self._connection.is_connected

@@ -22,7 +22,7 @@ class ExampleHandler(HandlerBase):
 		while True:
 			# Waiting for events
 			sleep(10)
-			remote.event_service_status_changed('SeRvIcE+NaMe', f'BooBooBoo {datetime.now()}')
+			# remote.event_service_status_changed('SeRvIcE+NaMe', f'BooBooBoo {datetime.now()}')
 
 	# All of the bellow actions are dummies.
 
@@ -35,7 +35,7 @@ class ExampleHandler(HandlerBase):
 		:return:
 		"""
 		print(f'Authorization is requested for {user}')
-		sleep(5)
+		# sleep(5)
 		fake_creds = {'dan': 'hhhh', 'stan': 'VvVv', 'ivan': 'pppaaassswwwooorrrddd', 'bogdan': 'KkKKk'}
 		if user in fake_creds and password == fake_creds[user]:
 			self._user_name = user
@@ -49,11 +49,11 @@ class ExampleHandler(HandlerBase):
 	@action
 	def uname(self):
 		print('Server\'s uname action is requested. Waiting 5 sec and returning result.')
-		sleep(5)
+		# sleep(5)
 		return uname()
 
 	@action
 	def hostname(self):
 		print('Server\'s hostname action is requested. Waiting 5 sec and returning result.')
-		sleep(5)
+		# sleep(5)
 		return node()

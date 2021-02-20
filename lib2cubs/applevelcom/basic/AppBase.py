@@ -20,7 +20,7 @@ class AppBase:
 
 	@classmethod
 	@abstractmethod
-	def create_connection(cls, host, port) -> Connection:
+	def create_connection(cls, host, port, client_crt=None, enc_key=None, server_crt=None, server_hostname=None) -> Connection:
 		pass
 
 	@classmethod
@@ -37,9 +37,20 @@ class AppBase:
 			conn.ssl_server_hostname = '2cubs-server' if not server_hostname else server_hostname
 		return conn
 
+	con_data: dict = None
+
 	@classmethod
-	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009):
-		return cls(cls.create_connection(host, port))
+	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, enc_key=None, server_crt=None, server_hostname=None):
+		instance = cls(cls.create_connection(host, port, client_crt, enc_key, server_crt, server_hostname))
+		instance.con_data = {
+			'host': host,
+			'port': port,
+			'client_crt': client_crt,
+			'enc_key': enc_key,
+			'server_crt': server_crt,
+			'server_hostname': server_hostname
+		}
+		return instance
 
 	def start_app(self):
 		pass
