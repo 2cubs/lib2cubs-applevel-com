@@ -57,3 +57,8 @@ class ExampleHandler(HandlerBase):
 		print('Server\'s hostname action is requested. Waiting 5 sec and returning result.')
 		# sleep(5)
 		return node()
+
+	@action
+	def server_time(self):
+		print('Server\'s time action is requested.')
+		return str(datetime.now())

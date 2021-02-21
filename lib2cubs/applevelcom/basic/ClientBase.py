@@ -10,6 +10,8 @@ from lib2cubs.applevelcom.transport import SimpleFrame
 
 class ClientBase(AppBase):
 
+	EVENT_CONNECTION_DISCONNECTED: str = 'connection_disconnected'
+
 	_action_threads: list = list()
 	_queue_sending_frames: Queue = None
 	_thread: Thread = None
@@ -95,17 +97,18 @@ class ClientBase(AppBase):
 	auto_reconnect: bool = True
 
 	def _disconnecting(self):
+		self.trigger_event(self.EVENT_CONNECTION_DISCONNECTED)
 		# self._send_frame_lock.acquire()
-		print('!! Disconnected !!')
-		if self.auto_reconnect and self._is_app_started:
-			print('Connection error. sleeping 5')
-			sleep(5)
-			self.start_app()
-			# self._check_delivery_status()
-			# print('Waiting 5')
-			# sleep(5)
-			# print('Checking delivery status')
-			# self._check_delivery_status()
+		# print('!! Disconnected !!')
+		# if self.auto_reconnect and self._is_app_started:
+		# 	print('Connection error. sleeping 5')
+		# 	sleep(5)
+		# 	self.start_app()
+		# self._check_delivery_status()
+		# print('Waiting 5')
+		# sleep(5)
+		# print('Checking delivery status')
+		# self._check_delivery_status()
 
 	def send(self, frame):
 		self._queue_sending_frames.put(frame)
@@ -224,6 +227,15 @@ class ClientBase(AppBase):
 
 	@classmethod
 	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, client_key=None, server_crt=None, server_hostname=None, ssl_cred_bundle=None):
+		kwargs = cls._prepare_connection_params(host, port, client_crt, client_key, server_crt, server_hostname, ssl_cred_bundle)
+
+		if 'ssl_cred_bundle' in kwargs:
+			del kwargs['ssl_cred_bundle']
+		instance = super(ClientBase, cls).get_instance(**kwargs)
+		return instance
+
+	@classmethod
+	def _prepare_connection_params(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, client_key=None, server_crt=None, server_hostname=None, ssl_cred_bundle=None):
 
 		if cls.is_host_ip(host) and not server_hostname:
 			raise Exception('When the host is an IP address, server_hostname param is mandatory!')
@@ -237,25 +249,47 @@ class ClientBase(AppBase):
 			client_key = client_key if client_key else ssl_cred_bundle
 			server_crt = server_crt if server_crt else ssl_cred_bundle
 
-		instance = super(ClientBase, cls).get_instance(host, port, client_crt, client_key, server_crt, server_hostname)
-		return instance
+		return {
+			'host': host, 'port': port,
+			'client_crt': client_crt, 'enc_key': client_key, 'server_crt': server_crt,
+			'server_hostname': server_hostname,
+			# 'ssl_cred_bundle': ssl_cred_bundle
+		}
 
-	def connect(self):
-		self.reconnect(False)
+	def connect(self, **kwargs):
+		"""
+		Important: if provided any argument - then the reconnection will be forced, and the connection data must be provided,
+		if no argument is provided - then reconnecting to the existing connection data.
+		:param kwargs:
+		:return:
+		"""
+		forced = False
+		if len(kwargs) > 0:
+			self.con_data = self._prepare_connection_params(**kwargs)
+			forced = True
+		self.reconnect(forced)
 
 	def reconnect(self, forced: bool = True):
 		if not self._connection or not self._connection.is_connected or forced:
-			if self.is_connected:
-				self.disconnect()
+			self.disconnect()
 			self.start_app()
 
 	def _new_connection(self):
 		kwargs = copy(self.con_data)
-		kwargs['client_key'] = kwargs['enc_key']
-		del kwargs['enc_key']
+		kwargs['client_key'] = kwargs['enc_key'] if 'enc_key' in kwargs else kwargs['client_key']
+		if 'enc_key' in kwargs:
+			del kwargs['enc_key']
 		return self.create_connection(**kwargs)
 
-	def disconnect(self):
+	def disconnect(self, prevent_event: bool = False):
+		"""
+		Method will trigger the "disconnect" event if the app is connected and param "prevent_event" is not True
+		:param prevent_event:
+		:return:
+		"""
+		if self.is_connected and not prevent_event:
+			# TODO rename the method
+			self._disconnecting()
 		self._connection = self._new_connection()
 
 	@property

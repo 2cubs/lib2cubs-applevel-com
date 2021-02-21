@@ -11,7 +11,8 @@ class HandlerBase(ClientBase):
 			self._is_app_started = True
 
 	def _disconnecting(self):
-		print('Client has disconnected')
+		pass
+		# print('Client has disconnected')
 
 	def _check_delivery_status_loop(self):
 		while self._connection.is_connected:
