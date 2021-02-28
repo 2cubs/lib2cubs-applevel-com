@@ -1,5 +1,6 @@
+import os
+import sys
 from datetime import datetime
-from os import uname
 from platform import node
 from time import sleep
 
@@ -49,13 +50,11 @@ class ExampleHandler(HandlerBase):
 	@action
 	def uname(self):
 		print('Server\'s uname action is requested. Waiting 5 sec and returning result.')
-		# sleep(5)
-		return uname()
+		return sys.platform if sys.platform != 'linux' else os.uname()
 
 	@action
 	def hostname(self):
 		print('Server\'s hostname action is requested. Waiting 5 sec and returning result.')
-		# sleep(5)
 		return node()
 
 	@action

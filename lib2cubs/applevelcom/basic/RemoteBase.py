@@ -75,8 +75,11 @@ class RemoteBase:
 		data = frame.content
 		args = data['args']
 		kwargs = data['kwargs']
-		res = getattr(self._app, data['action'])(*args, **kwargs)
-		self.resp(frame, res)
+		try:
+			res = getattr(self._app, data['action'])(*args, **kwargs)
+			self.resp(frame, res)
+		except AttributeError as e:
+			print(f'Requested non-existing action. requested: {e}')
 
 	def __getattr__(self, item):
 		def wrapper(*args, **kwargs):

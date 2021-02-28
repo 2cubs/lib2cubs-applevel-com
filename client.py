@@ -6,8 +6,8 @@ from lib2cubs.applevelcom.examples import ExampleClient
 
 
 # Method that is attached to the event EVENT_SERVICE_STATUS_CHANGED
-def my_event_cb(service, status):
-	print(f'Event of my event cb!!! service: {service}; status: {status}')
+def my_event_cb(service, config):
+	print(f'Event of my event cb!!! service: {service}; config: {config}')
 
 
 # Method that invoked on EVENT_CONNECTION_DISCONNECTED (when disconnection is happening)
