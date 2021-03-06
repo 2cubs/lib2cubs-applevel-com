@@ -1,12 +1,10 @@
-import os
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from ssl import SSLWantReadError
 from threading import Thread, Lock
 from time import sleep
 
-from lib2cubs.lowlevelcom.Connection import Connection as LibConnection
-
 from lib2cubs.applevelcom.transport import SimpleFrame
+from lib2cubs.lowlevelcom.Connection import Connection as LibConnection
 
 
 class Connection(LibConnection):

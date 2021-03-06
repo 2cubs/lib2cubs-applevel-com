@@ -21,4 +21,7 @@ setup(
 		"Operating System :: OS Independent",
 	],
 	python_requires='>=3.8',
+	install_requires=[
+		'lib2cubs-lowlevel-com@git+https://github.com/2cubs/lib2cubs-lowlevel-com.git#egg=lib2cubs-lowlevel-com>=0.3.1'
+	]
 )
