@@ -3,6 +3,7 @@ from datetime import datetime
 from os.path import join, dirname, abspath
 
 from lib2cubs.applevelcom.examples import ExampleClient
+# from lib2cubs.applevelcom.examples.ExampleClient import ExampleClient
 
 
 # Method that is attached to the event EVENT_SERVICE_STATUS_CHANGED
@@ -18,6 +19,7 @@ def oh_my_i_am_disconnected():
 # Building a cred-bundle is just concatenating keys and certs to one .pem file
 # cat client.crt client.key server.crt > cred-bundle-client.pem
 connection_params = {
+	'host': '127.0.0.1',
 	'ssl_cred_bundle': join(dirname(abspath(__file__)), 'ssl_d', 'cred-bundle-client.pem'),
 	'server_hostname': '2cubs-server'
 }
@@ -30,7 +32,7 @@ app.subscribe_to_event(ExampleClient.EVENT_SERVICE_STATUS_CHANGED, my_event_cb)
 app.subscribe_to_event(ExampleClient.EVENT_CONNECTION_DISCONNECTED, oh_my_i_am_disconnected)
 
 # Running remote method "auth". It does logging in and returns result of it as True or False
-print(f'Doing auth. Getting auth status: {app.remote.auth("ivan", "pppaaassswwwooorrrddd")}')
+print(f'Doing auth. Getting auth status: {app.remote.auth("ivan", "pppaaassswwwooorrrddd2")}')
 
 # Getting result from the remote "uname" method
 print(f'Getting uname: {app.remote.uname()}')

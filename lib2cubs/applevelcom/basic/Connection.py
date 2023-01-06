@@ -63,10 +63,12 @@ class Connection(LibConnection):
 		# Already subscribed
 		return True
 
-	def _after_open_connection(self):
+	def _after_open_connection(self, is_reconnect: bool = False):
 		super(Connection, self)._after_open_connection()
 		self._register_events()
 		self._t_selecting_events = Thread(target=self._selecting_events, daemon=True)
+		if is_reconnect:
+			self.ready_to_operate()
 
 	def ready_to_operate(self):
 		"""

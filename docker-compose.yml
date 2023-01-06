@@ -1,0 +1,10 @@
+version: '3'
+services:
+  main:
+    build: .
+    command: bash entry.sh
+    volumes:
+    - .:/opt/demo
+#    - /home/ivan/development/lib2cubs-lowlevel-com:/opt/low-level-lib
+    ports:
+    - "127.0.0.1:60009:60009/tcp"

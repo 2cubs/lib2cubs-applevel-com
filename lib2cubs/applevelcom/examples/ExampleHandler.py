@@ -36,8 +36,8 @@ class ExampleHandler(HandlerBase):
 		:return:
 		"""
 		print(f'Authorization is requested for {user}')
-		# sleep(5)
-		fake_creds = {'dan': 'hhhh', 'stan': 'VvVv', 'ivan': 'pppaaassswwwooorrrddd', 'bogdan': 'KkKKk'}
+		sleep(2)
+		fake_creds = {'dan': 'hhhh', 'stan': 'VvVv', 'ivan': 'pppaaassswwwooorrrddd2', 'bogdan': 'KkKKk'}
 		if user in fake_creds and password == fake_creds[user]:
 			self._user_name = user
 			self._user_roles.append('user')
@@ -49,15 +49,21 @@ class ExampleHandler(HandlerBase):
 
 	@action
 	def uname(self):
-		print('Server\'s uname action is requested. Waiting 5 sec and returning result.')
-		return sys.platform if sys.platform != 'linux' else os.uname()
+		if self.is_authorized():
+			print('Server\'s uname action is requested. Waiting 5 sec and returning result.')
+			return sys.platform if sys.platform != 'linux' else os.uname()
+		return "??Unauthorized??"
 
 	@action
 	def hostname(self):
-		print('Server\'s hostname action is requested. Waiting 5 sec and returning result.')
-		return node()
+		if self.is_authorized():
+			print('Server\'s hostname action is requested. Waiting 5 sec and returning result.')
+			return node()
+		return "??Unauthorized??"
 
 	@action
 	def server_time(self):
-		print('Server\'s time action is requested.')
-		return str(datetime.now())
+		if self.is_authorized():
+			print('Server\'s time action is requested.')
+			return str(datetime.now())
+		return "??Unauthorized??"

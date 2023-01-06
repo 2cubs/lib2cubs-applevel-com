@@ -1,4 +1,5 @@
 #!/bin/env python
+import logging
 from os.path import join, dirname, abspath
 
 from lib2cubs.applevelcom.basic import ServerBase
@@ -7,6 +8,7 @@ from lib2cubs.applevelcom.examples import ExampleHandler
 ssl_path = join(dirname(abspath(__file__)), 'ssl_d')
 
 instance_params = {
+	'host': '0.0.0.0',
 	'client_crt': join(ssl_path, 'client.crt'),
 	'server_key': join(ssl_path, 'server.key'),
 	'server_crt': join(ssl_path, 'server.crt'),
@@ -14,4 +16,5 @@ instance_params = {
 	'handler_class': ExampleHandler
 }
 
+print('Started server app.\n')
 ServerBase.get_instance(**instance_params).start_app()
