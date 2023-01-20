@@ -1,20 +1,31 @@
-#!/bin/env python
 import logging
-from os.path import join, dirname, abspath
+from os.path import dirname, abspath
 
-from lib2cubs.applevelcom.basic import ServerBase
-from lib2cubs.applevelcom.examples import ExampleHandler
+from lib2cubs.lowlevelcom import Utils
 
-ssl_path = join(dirname(abspath(__file__)), 'ssl_d')
+from lib2cubs.applevelcom.basic.ServerBase import ServerBase
+from lib2cubs.applevelcom.examples.ServerHandlerExample import ServerHandlerExample
 
-instance_params = {
-	'host': '0.0.0.0',
-	'client_crt': join(ssl_path, 'client.crt'),
-	'server_key': join(ssl_path, 'server.key'),
-	'server_crt': join(ssl_path, 'server.crt'),
-	'server_hostname': '2cubs-server',
-	'handler_class': ExampleHandler
-}
 
-print('Started server app.\n')
-ServerBase.get_instance(**instance_params).start_app()
+# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+
+
+Utils.setup(dirname(abspath(__file__)))
+
+
+host = 'localhost'
+port = 60009
+
+
+if __name__ == '__main__':
+    try:
+        server = ServerBase('cred-bundle-client.pem', host, port, handler_class=ServerHandlerExample,
+                            # )
+                            disable_ssl=True, confirm_disabling_of_ssl=True)
+        server.start()
+        server.join()
+    except (KeyboardInterrupt, SystemExit):
+        print('## [ctrl+c] pressed')
+        print('## Out of the app.')
+        server.is_running = False

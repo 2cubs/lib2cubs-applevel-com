@@ -1,19 +1,35 @@
-from lib2cubs.applevelcom.basic import ClientBase, ServerBase
+import logging
+from threading import Thread
+from time import sleep
+
+from lib2cubs.applevelcom.basic.AppLevelSkeletonBase import AppLevelSkeletonBase
 
 
-class HandlerBase(ClientBase):
+class HandlerBase(AppLevelSkeletonBase, Thread):
 
-	parent: ServerBase = None
+	def run(self) -> None:
+		if not self.connection:
+			raise Exception('Connection object was not provided into handler. Failed')
 
-	def start_app(self):
-		if not self._is_app_started:
-			self._thread.start()
-			self._is_app_started = True
+		logging.debug('ServerHandler running pre-init')
+		self._pre_init()
 
-	def _disconnecting(self):
-		pass
-		# print('Client has disconnected')
+		logging.debug('ServerHandler running init')
+		self.init()
 
-	def _check_delivery_status_loop(self):
-		while self._connection.is_connected:
-			self._check_delivery_status()
+		logging.debug('ServerHandler running main')
+		res = self.main(self._remote)
+		logging.debug('Main of client has finished')
+
+		if res is None:
+			# This default behaviour of server-handler differs from client-side
+			# By default it should be in an infinite loop
+			res = not self.is_finished
+
+		if res:
+			while not self.is_finished:
+				sleep(5)
+		self.stop_main()
+
+		# connection.is_auto_reconnect_allowed = True
+		self.connection.wait_for_subroutines()

@@ -1,4 +1,4 @@
-from lib2cubs.lowlevelcom.basic.SimpleFrame import SimpleFrame as LibSimpleFrame
+from lib2cubs.lowlevelcom.frames.SimpleFrame import SimpleFrame as LibSimpleFrame
 
 
 class SimpleFrame(LibSimpleFrame):

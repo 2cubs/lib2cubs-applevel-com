@@ -1,43 +1,63 @@
-from time import sleep
+from lib2cubs.lowlevelcom import GenericConnection
 
-from lib2cubs.applevelcom.basic import AppBase, Connection
+from lib2cubs.applevelcom.basic import AppBase
+from lib2cubs.applevelcom.basic.HandlerBase import HandlerBase
 
 
 class ServerBase(AppBase):
+	name: str = 'Server Base (l2c-al)'
 
-	handler_class = None
-	_active_handlers: dict = None
+	is_running = True
 
-	def __init__(self, *args, **kwargs):
-		super(ServerBase, self).__init__(*args, **kwargs)
-		self._active_handlers = dict()
-		self._connection.subscribe_to_event('accept', self._handler_connection_ready)
+	_host: str = None
+	_port: int = None
+	_pem_bundle_name: str = None
 
-	def _handler_connection_ready(self, connection: Connection):
-		handler = self.handler_class(connection)
-		print('Incoming connection. Accepting. Deploying handler')
-		print(f'Handler: {handler.id}')
-		handler.start_app()
-		self._active_handlers[handler.id] = handler
+	_is_ssl_disabled: bool = False
 
-	@classmethod
-	def create_connection(cls, host: str, port: int, client_crt=None, server_key=None, server_crt=None, server_hostname=None) -> Connection:
-		conn = cls._common_prepare_connection(Connection.TYPE_SERVER, host, port,
-			client_crt=client_crt,
-			enc_key=server_key,
-			server_crt=server_crt,
-			server_hostname=server_hostname
+	_connection_threads = None
+	_connection_class = None
+	_handler_class = None
+
+	@property
+	def is_ssl_disabled(self):
+		return self._is_ssl_disabled
+
+	def __init__(self, pem_bundle_name: str, host: str = 'localhost', port: int = 60009,
+				connection_class=GenericConnection,
+				handler_class=HandlerBase,
+				disable_ssl: bool = False,
+				confirm_disabling_of_ssl: bool = False):
+		super(ServerBase, self).__init__()
+		self._host = host
+		self._port = port
+		self._pem_bundle_name = pem_bundle_name
+		self._is_ssl_disabled = disable_ssl and confirm_disabling_of_ssl
+		self._connection_threads = []
+		self._connection_class = connection_class
+		self._handler_class = handler_class
+
+	def run(self) -> None:
+
+		self._connection_class.prepare_server(
+			self._server_callback,
+			self._pem_bundle_name,
+			self._host, self._port,
+			self._is_ssl_disabled
 		)
-		return conn
 
-	def start_app(self):
-		self._connection.listen()
-		self._connection.ready_to_operate()
-		while True:
-			sleep(10)
+		print('## ExampleServer: waiting for sub-threads to finish')
+		for t in self._connection_threads:
+			t.join()
 
-	@classmethod
-	def get_instance(cls, host: str = '127.0.0.1', port: int = 60009, client_crt=None, server_key=None, server_crt=None, server_hostname=None, handler_class=None):
-		instance = super(ServerBase, cls).get_instance(host, port, client_crt, server_key, server_crt, server_hostname)
-		instance.handler_class = handler_class if handler_class is not None else instance.handler_class
-		return instance
+	def _server_callback(self, sock):
+		while self.is_running:
+			handler = self._handler_class()
+
+			gen = self._connection_class.gen_new_server_connection(sock, handler.events_subscription())
+
+			for connection in gen:
+				if connection:
+					handler.connection = connection
+					self._connection_threads.append(handler)
+					handler.start()
