@@ -1,9 +1,7 @@
 from datetime import datetime
-from time import sleep
 
-from lib2cubs.applevelcom.basic import action
-from lib2cubs.applevelcom.basic.HandlerBase import HandlerBase
-from lib2cubs.applevelcom.basic.RemoteForServer import RemoteForServer
+from lib2cubs.applevelcom.basic import HandlerBase
+from lib2cubs.applevelcom.basic.internals import action, RemoteForServer
 
 
 class ServerHandlerExample(HandlerBase):
@@ -28,21 +26,7 @@ class ServerHandlerExample(HandlerBase):
 
 	def main(self, remote: RemoteForServer):
 		print(f'>> Client ? has just connected')
-		while 1000:
-			sleep(1)
-		# i = 0
-		# while i < 10000:
-		# 	i += 1
-		# 	remote.get_time()
-	# 	sleep(5)
-	# 	print(f"Requesting client's time: {remote.get_time()}")
-	# 	sleep(5)
-	# 	print(f"Requesting client's time: {remote.get_time()}")
-	#
-	# 	sleep(5)
-	# 	print(f"Requesting client's time: {remote.get_time()}")
-	#
-	# 	print('TEST')
-	# 	# Be careful returning "False" here, this will terminate connection before client might send something!
-	# 	# return False
-	# 	while not self.is_finished
+
+		client_iam = remote.i_am()
+
+		print(f"Client is: {client_iam}")

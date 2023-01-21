@@ -1,12 +1,11 @@
 
 
 class RemoteBase:
-
 	_is_async: bool = False
 	_proxied_obj = None
 
 	def __init__(self, proxied_obj, is_async: bool = False):
-		from lib2cubs.applevelcom.basic.AppLevelSkeletonBase import AppLevelSkeletonBase
+		from lib2cubs.applevelcom.basic import AppLevelSkeletonBase
 
 		self._proxied_obj: AppLevelSkeletonBase = proxied_obj
 		self._is_async = is_async

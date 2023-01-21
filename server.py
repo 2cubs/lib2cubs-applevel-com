@@ -4,7 +4,7 @@ from os.path import dirname, abspath
 from lib2cubs.lowlevelcom import Utils
 
 from lib2cubs.applevelcom.basic.ServerBase import ServerBase
-from lib2cubs.applevelcom.examples.ServerHandlerExample import ServerHandlerExample
+from lib2cubs.applevelcom.examples import ServerHandlerExample
 
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -26,6 +26,6 @@ if __name__ == '__main__':
         server.start()
         server.join()
     except (KeyboardInterrupt, SystemExit):
+        server.soft_shutdown()
         print('## [ctrl+c] pressed')
-        print('## Out of the app.')
-        server.is_running = False
+        print('## Out of the app. Waiting 30 seconds for finalization')

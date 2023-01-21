@@ -3,16 +3,18 @@ from threading import Thread
 
 from lib2cubs.lowlevelcom import GenericConnection
 
-from lib2cubs.applevelcom.basic.Promise import Promise
-from lib2cubs.applevelcom.basic.Remote import Remote
 from lib2cubs.applevelcom.transport import SimpleFrame
+from .internals import Remote, Promise, action, pre
 
 
 class AppLevelSkeletonBase:
 
 	connection: GenericConnection = None
 	_actions: dict = None
+	_preprocessors: dict = None
 	_promises = None
+	_invoked_action_threads: list = None
+	_remote = None
 
 	def events_subscription(self):
 		return {
@@ -34,29 +36,25 @@ class AppLevelSkeletonBase:
 		logging.debug(f'>> Sending frame {data.uid} with payload {data.content}')
 
 	def event_reading(self, event, frame, connection):
-		# frame = SimpleFrame.parse(data)
-
 		logging.debug(f'<< Received frame {frame.uid} with content {frame.content}')
 
 		if frame.content["type"] == 'action-call':
 			action_to_call = frame.content['action'] if 'action' in frame.content else None
 			if not action_to_call or action_to_call not in self._actions:
-				# raise Exception(f'No such action: {action_to_call}')
-				print(f'ERROR: No such action: {action_to_call}')
+				logging.error(f'ERROR: No such action: {action_to_call}')
 			else:
 				args = frame.content['args']
 				kwargs = frame.content['kwargs']
 
-				action_callable = self._actions[action_to_call]
+				action_callable = self._actions.get(action_to_call)
 
 				is_async = bool(frame.content.get('is_async', False))
 
-				t = Thread(target=self._invoked_action, args=(action_callable, args, kwargs, frame.uid, is_async))
+				t = Thread(target=self._invoked_action, args=(action_callable, action_to_call, args, kwargs, frame.uid, is_async))
 				self._invoked_action_threads.append(t)
 				t.start()
 
 		if frame.content['type'] == 'action-return':
-			# print(f'AR: {frame.content}')
 			self._call_return(frame)
 
 	def event_connected(self, event, connection):
@@ -78,54 +76,56 @@ class AppLevelSkeletonBase:
 
 	def _pre_init(self):
 		self._actions = {}
-		# self._calls_locks = {}
-		# self._return_data = {}
+		self._preprocessors = {}
 		self._promises = {}
 		self._invoked_action_threads = []
 		self._remote = Remote(self)
 
 		for item in dir(self):
 			func = getattr(self, item)
-			if hasattr(func, 'is_action'):
+			if hasattr(func, 'is_action') and func.is_action:
 				action_name = getattr(func, 'action_name')
 				self._actions[action_name] = getattr(func, 'callback_ref') or func
+			if hasattr(func, 'is_preprocessor') and func.is_preprocessor:
+				action_name = getattr(func, 'action_name')
+				self._preprocessors[action_name] = getattr(func, 'callback_ref') or func
 
 	def init(self):
 		pass
 
-	_invoked_action_threads: list = None
-
-	def _send_back_return_data(self, for_uid, data: any):
+	def _send_back_return_data(self, for_uid, data: any, action_name: str):
 		self.connection.send(SimpleFrame({
 			'type': 'action-return',
+			'action': action_name,
 			'for_uid': for_uid,
 			'data': data,
 		}))
 
-	def _invoked_action(self, action: callable, args, kwargs, for_uid, is_async, is_no_return: bool = False):
-		res = action(self, self._remote, *args, **kwargs)
+	def _invoked_action(self, act: callable, action_name: str, args, kwargs, for_uid, is_async, is_no_return: bool = False):
+		res = act(self, self._remote, *args, **kwargs)
 		if not is_no_return:
-			self._send_back_return_data(for_uid, res)
+			self._send_back_return_data(for_uid, res, action_name)
 
 	def _call_return(self, frame: SimpleFrame):
-		# self._promises[frame.uid]
-		if 'for_uid' in frame.content:
-			for_uid = frame.content['for_uid']
-			r = for_uid in self._promises
-			# print(f'received frame for {for_uid}, is available: {r}')
+		content = frame.content
+		if 'for_uid' in content:
+			for_uid = content['for_uid']
+			data = content['data']
+			if content['action'] in self._preprocessors:
+				# NOTE  Pre-processing of received data happens here
+				act = self._preprocessors[content['action']]
+				data = act(self, data)
 			if for_uid in self._promises:
 				promise: Promise = self._promises[for_uid]
-				# print(f'setting result... for {for_uid}')
-				promise.set_result(frame.content['data'])
-				# print(f'result set for {for_uid}')
+				promise.set_result(data)
 				del self._promises[for_uid]
 
-	def call_action(self, action, args=(), kwargs=None, is_async: bool = False) -> Promise or any:
+	def call_action(self, action_name, args=(), kwargs=None, is_async: bool = False) -> Promise or any:
 		if kwargs is None:
 			kwargs = {}
 		message = {
 			'type': 'action-call',
-			'action': action,
+			'action': action_name,
 			'args': args,
 			'kwargs': kwargs,
 			'is_async': is_async,
@@ -143,7 +143,21 @@ class AppLevelSkeletonBase:
 		return promise.get_result()
 
 	def stop_main(self):
-		logging.debug('StopMain is running')
-
 		self.connection.disconnect()
-		logging.debug('StopMain is finished')
+
+	@pre('i_am')
+	def pre_i_am(self, data: dict):
+		data['_ip'] = self.connection.host
+		data['_port'] = self.connection.port
+		logging.debug('Preprocessing of i_am() action result of remote, final data: %s', data)
+		return data
+
+	@property
+	def who_am_i(self):
+		return {
+
+		}
+
+	@action
+	def i_am(self, remote: Remote):
+		return self.who_am_i

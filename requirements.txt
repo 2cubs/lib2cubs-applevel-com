@@ -1,3 +1,3 @@
-# git+https://github.com/2cubs/lib2cubs-lowlevel-com.git@1.0.1#egg=lib2cubs-lowlevel-com
+git+https://github.com/2cubs/lib2cubs-lowlevel-com.git@1.1.0#egg=lib2cubs-lowlevel-com
 #-e file:///opt/low-level-lib#egg=lib2cubs-lowlevel-com
--e file:///home/ivan/development/lib2cubs-lowlevel-com#egg=lib2cubs-lowlevel-com
+#-e file:///home/ivan/development/lib2cubs-lowlevel-com#egg=lib2cubs-lowlevel-com

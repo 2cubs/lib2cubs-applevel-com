@@ -1,11 +1,21 @@
 import logging
+from datetime import datetime
 from threading import Thread
 from time import sleep
 
-from lib2cubs.applevelcom.basic.AppLevelSkeletonBase import AppLevelSkeletonBase
+from . import AppLevelSkeletonBase
+from .internals import RemoteForServer
 
 
 class HandlerBase(AppLevelSkeletonBase, Thread):
+
+	_server_obj = None
+
+	def set_server_obj(self, server_obj):
+		from .ServerBase import ServerBase
+
+		if not self._server_obj:
+			self._server_obj: ServerBase = server_obj
 
 	def run(self) -> None:
 		if not self.connection:
@@ -29,7 +39,21 @@ class HandlerBase(AppLevelSkeletonBase, Thread):
 		if res:
 			while not self.is_finished:
 				sleep(5)
+		self._server_obj.del_active_handler(self)
 		self.stop_main()
 
 		# connection.is_auto_reconnect_allowed = True
 		self.connection.wait_for_subroutines()
+
+	@property
+	def who_am_i(self):
+		return {
+			'type': 'server',
+			'description': 'Server Handler',
+		}
+
+	def notify_client_soft_shutdown(self, dt_at: datetime):
+		logging.debug('Soft Shutdown notification sending..')
+		remote: RemoteForServer = self._remote
+		remote.asynced().soft_shutdown_initiated(str(dt_at))
+		logging.debug('Soft Shutdown notification sent')

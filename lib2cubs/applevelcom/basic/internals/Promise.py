@@ -1,6 +1,7 @@
 import logging
-from threading import Lock, Condition
+from threading import Condition
 
+from lib2cubs.applevelcom.basic import AppLevelSkeletonBase
 from lib2cubs.applevelcom.transport import SimpleFrame
 
 
@@ -20,7 +21,6 @@ class Promise:
 			pass
 
 	def __init__(self, ref_obj, frame: SimpleFrame):
-		from lib2cubs.applevelcom.basic.AppLevelSkeletonBase import AppLevelSkeletonBase
 		self._ref_obj: AppLevelSkeletonBase = ref_obj
 		self._frame = frame
 		self._t_condition = Condition()
@@ -32,22 +32,11 @@ class Promise:
 			logging.warning('Promise sending method can be ran just once! Additional attempt is ignored')
 
 	def set_result(self, result: any):
-		logging.debug('set_result %s', self._frame.uid)
 		if not self._is_result_set:
-			logging.debug('set_result. not set yet %s', self._frame.uid)
-
 			with self._t_condition:
-				logging.debug('set_result. condition passed %s', self._frame.uid)
-
 				self._result = result
-				# print(f'set_result. result set {self._frame.uid}')
-
 				self._is_result_set = True
-				# print(f'set_result. result marked {self._frame.uid}')
-
 				self._t_condition.notify_all()
-				# print(f'set_result. condition notified {self._frame.uid}')
-
 		else:
 			logging.warning("Promise's result could be set only once! Additional attempt is ignored")
 

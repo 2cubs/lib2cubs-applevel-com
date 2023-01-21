@@ -1,10 +1,12 @@
 import logging
+from datetime import datetime
 from time import sleep
 
 from lib2cubs.lowlevelcom import GenericConnection
 
+from . import AppLevelSkeletonBase
 from lib2cubs.applevelcom.basic import AppBase
-from lib2cubs.applevelcom.basic.AppLevelSkeletonBase import AppLevelSkeletonBase
+from .internals import action, RemoteForClient
 
 
 class ClientBase(AppLevelSkeletonBase, AppBase):
@@ -62,3 +64,14 @@ class ClientBase(AppLevelSkeletonBase, AppBase):
 
 		# connection.is_auto_reconnect_allowed = True
 		self.connection.wait_for_subroutines()
+
+	@property
+	def who_am_i(self):
+		return {
+			'type': 'client',
+			'description': 'Client Application',
+		}
+
+	@action
+	def soft_shutdown_initiated(self, remote: RemoteForClient, dt: datetime):
+		logging.debug('Soft Shutdown has been initiated by the server side %s', dt)
